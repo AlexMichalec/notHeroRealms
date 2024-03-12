@@ -24,18 +24,6 @@ def sepia(color):
     return (sepia_red, sepia_green, sepia_blue)
 
 
-def generate_wood_texture(width, height):
-    surface = pygame.Surface((width, height))
-    surface.fill(GREEN)
-    """""
-    for y in range(height):
-        for x in range(width):
-            noise = random.randint(0, 40)
-            color = (100 + noise, 50 + noise, 0)
-            surface.set_at((x, y), color)
-    """
-    return surface
-
 class Game:
     def __init__(self):
         pygame.init()
@@ -44,7 +32,7 @@ class Game:
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         pygame.display.set_caption("Hero Realms")
         self.clock = pygame.time.Clock()
-        self.wood_texture = generate_wood_texture(self.screen_width, self.screen_height)
+        self.bcg_color = (36,107,33)
         self.player = Player("Player 1")
         self.opponent = Player("Gary")
         self.active_cards = []
@@ -70,12 +58,17 @@ class Game:
         self.goal_y_set = False
         self.goal_y = 0
 
-        self.opp_stats_vertical = False
+        self.opp_stats_vertical = True
+        self.if_opponent_first_turn = True
 
         self.attack_points = []
 
         self.opponent_dialog = ""
         self.opponent_army_visible = False
+
+        image = pygame.image.load(f"opponent_pics/{str(random.randint(1, 12))}.png")
+        image = pygame.transform.scale(image, (200, 250))
+        self.opponent.image = image
 
 
     def restart(self):
@@ -88,6 +81,7 @@ class Game:
         self.shop_visible = True
         self.army_visible = False
         self.scrolling_speed = 0
+        self.bcg_color = (36, 107, 33)
 
         self.buttons = []
         self.set_buttons()
@@ -99,6 +93,19 @@ class Game:
         self.cards_up = []
         self.cards_down = []
         self.update_card_views()
+
+        self.timers = []
+        self.opponent_dialog = ""
+        self.opponent_army_visible = False
+        self.if_opponent_first_turn = True
+
+        image = pygame.image.load(f"opponent_pics/{str(random.randint(1, 12))}.png")
+        image = pygame.transform.scale(image, (200, 250))
+        self.opponent.image = image
+
+        self.who_starts()
+        self.attack_points = []
+
 
     def set_buttons(self):
         def func():
@@ -140,15 +147,15 @@ class Game:
         self.buttons.append(self.button_army)
 
 
-    def run(self):
-        self.intro()
-        #self.turn = "Player"
+    def run(self, if_ommit_info = False):
+        if not if_ommit_info:
+            self.intro()
+        else:
+            self.turn = "Player"
         self.update_card_views()
-        if self.turn == "Opponent":
-            t = Timer(1000, self.move_up)
-            t.activate()
-            self.timers.append(t)
         while True:
+
+
             for t in self.timers:
                 t.update()
 
@@ -160,7 +167,7 @@ class Game:
 
             if self.goal_y_set:
                 if abs(self.base_y - self.goal_y) >= 5:
-                    self.scrolling_speed = 5 if self.base_y < self.goal_y else -5
+                    self.scrolling_speed = 10 if self.base_y < self.goal_y else -10
                 else:
                     self.scrolling_speed = 0
                     self.goal_y_set = False
@@ -170,6 +177,7 @@ class Game:
                 self.handle_events(event)
             self.draw()
             self.move_cards()
+
             pygame.display.flip()
             self.clock.tick(60)
 
@@ -245,7 +253,10 @@ class Game:
             for event in pygame.event.get():
                 self.handle_events(event)
             pygame.display.update()
+        self.who_starts()
 
+    def who_starts(self):
+        i = 0
         x = random.choice(("Player", "Opponent"))
         if x == "Player":
             message = "This time you start"
@@ -292,7 +303,7 @@ class Game:
         self.turn = x
         if x == "Opponent":
             self.update_card_views()
-            self.opponent_turn()
+            self.move_up()
 
 
 
@@ -300,10 +311,15 @@ class Game:
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
+        if event.type == pygame.KEYDOWN:
+            if self.player.health <= 0 or self.opponent.health <= 0:
+                print("Restart?")
+                self.restart()
+                self.turn = "Player"
+
         if self.turn == "Player":
             if event.type == pygame.KEYDOWN:
-                if self.player.health <= 0 or self.opponent.health <= 0:
-                    self.restart()
+
                 if event.key == pygame.K_UP:
                     self.scrolling_speed =5
                 elif event.key == pygame.K_DOWN:
@@ -392,7 +408,7 @@ class Game:
         self.cards_up = [view for view in self.cards_up if view.y > -210]
 
     def draw(self):
-        self.screen.blit(self.wood_texture, (0, 0))
+        self.screen.fill(self.bcg_color)
         pygame.draw.rect(self.screen, "white", (10, self.base_y + self.screen_height*2//3, 150, 210), 3)
         for view in self.drawable_cards:
             view.draw()
@@ -444,10 +460,19 @@ class Game:
             self.draw_text("Do you want to start again?", (240, 240, 240), 200, 450, 30)
             self.draw_text("Press any button to start again", (240, 240, 240), 400, 550, 20)
 
+        if self.opponent.health <= 0:
+            self.active_cards = []
+            self.screen.fill((173,126,75))
+            gold = (255, 207, 75)
+            self.draw_text("Congratulation, you won!!! :D", gold, 260, 350, 80)
+            self.draw_text("Do you want to start again?", gold, 200, 450, 30)
+            self.draw_text("Press any button to start again", gold, 400, 550, 20)
+
         self.draw_attack()
 
         if self.opponent_dialog:
-            self.draw_text(self.opponent_dialog,(255, 255, 255),self.screen_width//2, 30, 25, True, (0,0,0))
+            self.screen.blit(self.opponent.image, (self.screen_width//2 - 100, 20))
+            self.draw_text(self.opponent_dialog,(255, 255, 255),self.screen_width//2, 300, 25, True, (0,0,0))
 
 
     def draw_attack(self):
@@ -458,10 +483,16 @@ class Game:
             point[1] += point[2]
             if point[2] > 0 and point[1] > self.screen_height + 100:
                 self.player.health -= 1
+                if self.player.health == 0:
+                    self.opp_speak()
             if point[2] < 0 and point[1] < -100:
                 self.opponent.health -= 1
+                if self.opponent.health == 0:
+                    self.timers = []
+                    self.opp_speak()
 
         self.attack_points = [x for x in self.attack_points if (x[2]>0 and x[1] < self.screen_height + 100) or (x[2]<0 and x[1] > -100)]
+
 
 
     def add_attack_player(self):
@@ -557,7 +588,7 @@ class Game:
 
         #DECK FACED DOWN
         deck_x = 10
-        deck_y = -1 * self.screen_height * 2 // 3 +self.base_y
+        deck_y = -1 * self.screen_height * 2 // 3 +self.base_y + 80
         for i, card in enumerate(self.opponent.deck.cards[:3]):
             view = CardView(self.screen, card, deck_x + i * 2, deck_y - i * 3, "face_down")
             self.drawable_cards.append(view)
@@ -759,9 +790,14 @@ class Game:
 
     def move_up(self):
         self.turn = "Opponent"
-        self.goal_y = 570
+        self.goal_y = 800
         self.goal_y_set = True
-        t = Timer(4000, self.opp_draw)
+        if len(self.attack_points) >= self.opponent.health:
+            return
+        if self.if_opponent_first_turn:
+            t = Timer(3000, self.opp_speak)
+        else:
+            t = Timer(1000, self.opp_speak)
         t.activate()
         self.timers.append(t)
 
@@ -769,36 +805,46 @@ class Game:
     def opp_draw(self):
         self.opponent.cards_in_front_of_me = self.opponent.deck.draw(self.opponent.cards_to_draw)
         self.update_card_views()
-        t = Timer(1000,self.opp_speak)
+        t = Timer(1000,self.opp_bef_use)
         t.activate()
         self.timers.append(t)
 
     def opp_speak(self):
-        temp = random.choice(opponent_sentences)
+        self.bcg_color = (26, 87, 23)
+        temp = random.choice(opponent_game_lines)
+        if self.if_opponent_first_turn:
+            self.if_opponent_first_turn = False
+            temp = random.choice(opponent_opening_lines)
+        if self.opponent.health <= 0:
+            temp = random.choice(opponent_dead_lines)
+        if self.player.health <= 0:
+            temp = random.choice(opponent_victory_lines)
         for i in range(len(temp)):
             t = Timer(100*i,self.opp_speak_gen(temp,i))
             t.activate()
             self.timers.append(t)
-        t = Timer(100*len(temp)+1000,self.opp_speak_gen(temp,-1))
+        t = Timer(100*len(temp)+2500,self.opp_speak_gen(temp,-1))
         t.activate()
         self.timers.append(t)
 
-        t = Timer(100 * len(temp) + 1500, self.opp_bef_use)
-        t.activate()
-        self.timers.append(t)
+        if self.opponent.health > 0 and self.player.health >0:
+            t = Timer(100 * len(temp) + 1500, self.opp_draw)
+            t.activate()
+            self.timers.append(t)
 
     def opp_speak_gen(self, text, index):
         def sub_fun():
             if index == -1:
                 self.opponent_dialog = ""
+                self.bcg_color = (36, 107, 33)
             else:
-                self.opponent_dialog = text[0:index]
+                self.opponent_dialog = text[0:index+1]
         return sub_fun
 
     def opp_bef_use(self):
         self.goal_y_set = True
         self.goal_y = 450
-        t = Timer(1000, self.opp_use)
+        t = Timer(2000, self.opp_use)
         t.activate()
         self.timers.append(t)
 
@@ -900,7 +946,7 @@ class Game:
     def opp_reset(self):
         self.turn = "Player"
         self.opponent.reset()
-        self.opp_stats_vertical = False
+        self.opp_stats_vertical = True
         self.update_card_views()
         self.timers = [t for t in self.timers if t.active]
 
@@ -915,6 +961,7 @@ if __name__ == "__main__":
         if x.type == "Hero":
             game.opponent.deck.cards.append(x)
             game.shop_deck.cards.remove(x)
+    game.opponent.health =1
     random.shuffle(game.opponent.deck.cards)
-    game.run()
+    game.run(True)
 
