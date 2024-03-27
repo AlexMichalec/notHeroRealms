@@ -66,7 +66,7 @@ class Game:
         self.opponent_dialog = ""
         self.opponent_army_visible = False
 
-        image = pygame.image.load(f"opponent_pics/{str(random.randint(1, 12))}.png")
+        image = pygame.image.load(f"opponent_pics/{str(random.randint(1, 20))}.png")
         image = pygame.transform.scale(image, (200, 250))
         self.opponent.image = image
 
@@ -110,39 +110,16 @@ class Game:
     def set_buttons(self):
         def func():
             if self.shop_visible:
-                self.button_army.x = 160
-                self.button_army.y = 80
-                self.button_army.base_x = self.button_army.x
-                self.button_army.base_y = self.button_army.y
-                self.button_army.update_rect()
                 self.shop_visible = False
             else:
-                self.button_army.x = 30
-                self.button_army.y = 320
-                self.button_army.base_x = self.button_army.x
-                self.button_army.base_y = self.button_army.y
-                self.button_army.update_rect()
-                self.army_visible = False
                 self.shop_visible = True
         self.button_shop = Button(self.screen, "Shop:", 160, 10, function=func)
         self.buttons.append(self.button_shop)
         def func2():
             if self.army_visible:
-                self.button_army.x = 30
-                self.button_army.y = 320
-                self.button_army.base_x = self.button_army.x
-                self.button_army.base_y = self.button_army.y
-                self.button_army.update_rect()
                 self.army_visible = False
-                self.shop_visible = True
             else:
-                self.button_army.x = 160
-                self.button_army.y = 80
-                self.button_army.base_x = self.button_army.x
-                self.button_army.base_y = self.button_army.y
-                self.button_army.update_rect()
                 self.army_visible = True
-                self.shop_visible = False
         self.button_army = Button(self.screen, "Your Heroes:", 30, 320, function=func2)
         self.buttons.append(self.button_army)
 
@@ -313,7 +290,6 @@ class Game:
             sys.exit()
         if event.type == pygame.KEYDOWN:
             if self.player.health <= 0 or self.opponent.health <= 0:
-                print("Restart?")
                 self.restart()
                 self.turn = "Player"
 
@@ -384,7 +360,7 @@ class Game:
 
     def move_cards(self):
         for view in self.cards_down:
-            view.y += 20
+            view.y += 30
             if view.y >= self.screen_height:
                 if self.player.next_bought_card_on_hand:
                     self.player.cards_in_front_of_me.append(view.card)
@@ -399,13 +375,15 @@ class Game:
                     self.player.deck.add_to_discarded(view.card)
                 self.update_card_views(True)
         self.cards_down = [view for view in self.cards_down if view.y < self.screen_height]
+        self.drawable_cards.extend(self.cards_down)
 
         for view in self.cards_up:
-            view.y -= 20
+            view.y -= 30
             if view.y <= -210:
                 self.opponent.deck.add_to_discarded(view.card)
                 self.update_card_views(True)
         self.cards_up = [view for view in self.cards_up if view.y > -210]
+        self.drawable_cards.extend(self.cards_up)
 
     def draw(self):
         self.screen.fill(self.bcg_color)
@@ -497,9 +475,51 @@ class Game:
 
     def add_attack_player(self):
         for i in range(self.player.attack_power):
-            self.attack_points.append([self.screen_width//2,self.screen_height - i*50, -10])
+            self.attack_points.append([self.screen_width//2,self.screen_height + i*50, -10])
 
     def add_attack_opponent(self):
+        names_of_killed_heroes = ""
+        heroes = self.player.army
+        guardians = [hero for hero in heroes if hero.if_guardian]
+        for guardian in guardians:
+            if guardian.health <= self.opponent.attack_power:
+                self.opponent.attack_power -= guardian.health
+                self.player.deck.add_to_discarded(guardian)
+                self.player.army.remove(guardian)
+                if len(names_of_killed_heroes):
+                    names_of_killed_heroes = names_of_killed_heroes + ", " + guardian.name
+                else:
+                    names_of_killed_heroes = guardian.name
+        guardians = [hero for hero in heroes if hero.if_guardian]
+        if len(guardians):
+            self.opponent.attack_power = 0
+            if names_of_killed_heroes:
+                self.opponent_dialog = "I kill your: " + names_of_killed_heroes + "!"
+                t = Timer(2000, self.opp_speak_gen("x", -1))
+                t.activate()
+                self.timers.append(t)
+            return
+        heroes = self.player.army
+        if self.opponent.attack_power < self.player.health:
+            for hero in heroes:
+                if hero.health <= self.opponent.attack_power:
+                    self.opponent.attack_power -= hero.health
+                    self.player.deck.add_to_discarded(hero)
+                    self.player.army.remove(hero)
+                    if len(names_of_killed_heroes):
+                        names_of_killed_heroes = names_of_killed_heroes + ", " + hero.name
+                    else:
+                        names_of_killed_heroes = hero.name
+
+        if len(names_of_killed_heroes):
+            if self.opponent.attack_power > 0:
+                self.opponent_dialog = "I kill your: " + names_of_killed_heroes + " and attack you with " + str(self.opponent.attack_power)
+            else:
+                self.opponent_dialog = "I kill your: " + names_of_killed_heroes + "!"
+            t = Timer(2000, self.opp_speak_gen("", -1))
+            t.activate()
+            self.timers.append(t)
+
         for i in range(self.opponent.attack_power):
             self.attack_points.append([self.screen_width//2,0 - i*50, 10])
 
@@ -565,17 +585,15 @@ class Game:
 
 
         #ARMY
-        by = 160 + self.base_y
+        by = 360 + self.base_y
         for i, card in enumerate(self.player.army):
-            x = 140 + i * (card_width + 20)
+            x = 290 + i * (card_width + 20) if self.army_visible else 2000
             state = "active" if card not in used else "used"
             y = by - 20 if state == "used" else by
             view = HeroView(self.screen, card, x, y, state)
             self.active_cards.append(view)
-            if self.army_visible:
-                self.drawable_cards.append(view)
-            else:
-                view.x = 2000
+            self.drawable_cards.append(view)
+
         """""
         for button in self.buttons:
             button.x = button.base_x
@@ -696,7 +714,6 @@ class Game:
         time.sleep(1)
         for card in self.opponent.cards_in_front_of_me:
             card.use(self.opponent)
-            print(self.opponent)
             for view in self.drawable_cards:
                 if view.card == card:
                     view.state = "used"
@@ -738,7 +755,6 @@ class Game:
             pygame.display.update()
             time.sleep(1)
             can_buy = [x for x in self.shop_to_buy if x.value <= self.opponent.coins]
-            print("bought:", card.name)
         #Attack
         points = [[self.screen_width//2,-50*i] for i in range(self.opponent.attack_power)]
         if len(points) > 0:
@@ -774,7 +790,6 @@ class Game:
         self.opponent.reset()
         self.draw()
         pygame.display.update()
-        print(self.opponent)
         time.sleep(2)
 
         self.scrolling_speed = -20
@@ -789,6 +804,8 @@ class Game:
         self.turn = "Player"
 
     def move_up(self):
+        self.army_visible = False
+        self.shop_visible = True
         self.turn = "Opponent"
         self.goal_y = 800
         self.goal_y_set = True
@@ -881,7 +898,6 @@ class Game:
             self.timers.append(t)
 
     def opp_use_army(self):
-        print("ARMY")
         self.opponent_army_visible = True
         self.update_card_views(True)
         used = False
@@ -956,12 +972,19 @@ class Game:
 
 if __name__ == "__main__":
     game = Game()
-    while len(game.opponent.deck.cards) <12:
-        x = random.choice(game.shop_deck.cards)
-        if x.type == "Hero":
-            game.opponent.deck.cards.append(x)
-            game.shop_deck.cards.remove(x)
-    game.opponent.health =1
+    if False:
+        while len(game.player.deck.cards) <12:
+            x = random.choice(game.shop_deck.cards)
+            if x.type == "Hero":
+                game.player.deck.cards.append(x)
+                game.shop_deck.cards.remove(x)
+    random.shuffle(game.player.deck.cards)
+    if False:
+        while len(game.opponent.deck.cards) <12:
+            x = random.choice(game.shop_deck.cards)
+            if x.type == "Hero":
+                game.opponent.deck.cards.append(x)
+                game.shop_deck.cards.remove(x)
     random.shuffle(game.opponent.deck.cards)
-    game.run(True)
+    game.run()
 
