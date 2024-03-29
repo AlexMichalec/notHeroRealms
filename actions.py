@@ -55,47 +55,28 @@ def get_attack_or_health(power,amount):
 
 def can_sacrifice(bonus=0):
     def sub_fun(player):
-        return
-        x = input("Do you want to sacrifice a card?(yes/no)").lower()
-        while x not in ("yes","y","no","n"):
-            x = input("type yes or no")
-        if x[0] == "n":
-            return
-
-        print("Choose card to sacrifice:")
-        for i, card in enumerate(player.cards_in_front_of_me+player.deck.discarded):
-            print(i+1,card.name)
-
-        x = input()
-        while x not in [str(x+1) for x in range(len(player.cards_in_front_of_me+player.deck.discarded))]:
-            x = input("type correct number")
-
-        x = int(x)-1
-        player.to_sacrifice.append((player.cards_in_front_of_me+player.deck.discarded)[x])
-        player.attack_power += bonus
+        player.cards_to_sacrifice = 1
+        player.sacrifice_bonus = bonus
     text = "You can sacrifice a card." if bonus == 0 else f"You can sacrifice a card, if you do it, your attack rises by {bonus}"
     return sub_fun, text
 
 def can_sacrifice_two(bonus=0):
     def sub_fun(player):
-        print("Sacrifising not ready yet")
-        return
+        player.cards_to_sacrifice = 2
+        player.sacrifice_bonus = bonus
     text = "You can sacrifice max 2 cards." if bonus == 0 else f"You can sacrifice max 2 cards, if you do it, your attack rises by {bonus}"
     return sub_fun, text
 
 def reactivate_hero():
     def sub_fun(player):
-        print("Action Reactivate not ready to use")
+        player.heroes_to_reactivate += 1
+        print("Action Reactivate not ready to use for player")
     return sub_fun, "Reactivate your Hero"
 
 def stun_hero():
     def sub_fun(player):
-        if len(player.opponent.army) >0:
-            card = random.choice(player.opponent.army)
-            player.opponent.army.remove(card)
-            player.opponent.deck.add_to_discarded(card)
-            print(f"{card.name} was stuned")
-    return sub_fun, "You can stun opponent's hero."
+        player.heroes_to_stan += 1
+    return sub_fun, "You can block opponent's hero."
 
 
 def next_bought_on_hand():
@@ -106,13 +87,13 @@ def next_bought_on_hand():
 def add_attack_for_hero(power = 1 ):
     def sub_fun(player):
         player.attack_power += len(player.army) * power
-    text = f"Add +{power} attack for every hero in you army."
+    text = f"Add +{power} attack for every hero in your party."
     return sub_fun, text
 
 def add_health_for_hero(k = 1):
     def sub_fun(player):
         player.health += len(player.army) * k
-    text = f"Add +{k} health for every hero in you army."
+    text = f"Add +{k} health for every hero in your party."
     return sub_fun, text
 
 def next_bought_action_on_the_top_of_deck():
@@ -123,7 +104,7 @@ def next_bought_action_on_the_top_of_deck():
 
 def next_bought_card_on_the_top_of_deck():
     def sub_fun(player):
-        player.next_bought_action_on_top += 1
+        player.next_bought_card_on_top += 1
 
     return sub_fun, "Put the next bought Card on the top of the deck"
 
@@ -172,7 +153,7 @@ def resurrect_card():
             return
         card = random.choice(player.deck.discarded)
         player.deck.discarded.remove(card)
-        player.deck = [card] + player.deck
+        player.deck.cards = [card] + player.deck.cards
     text = "You can take a discarded Card and put it on ur deck top."
     return sub_fun, text
 

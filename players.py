@@ -17,6 +17,10 @@ class Player:
         self.next_bought_card_on_hand = 0
         self.next_bought_action_on_top = 0
         self.next_bought_card_on_top = 0
+        self.cards_to_sacrifice = 0
+        self.sacrifice_bonus = 0
+        self.heroes_to_reactivate = 0
+        self.heroes_to_stun = 0
 
     def turn(self):
         pass
@@ -36,10 +40,28 @@ class Player:
         self.next_bought_card_on_hand = 0
         self.next_bought_action_on_top = 0
         self.next_bought_card_on_top = 0
+        self.cards_to_sacrifice = 0
+        self.heroes_to_reactivate = 0
+        self.heroes_to_stun = 0
 
 
     def __str__(self):
         return f"Player {self.name}: health({self.health}) coins({self.coins}) attack power({self.attack_power})"
+
+    def auto_sacrfice(self):
+        temp_deck = self.deck.discarded + self.cards_in_front_of_me
+        if len(temp_deck) < 1:
+            return False
+        if len(temp_deck + self.deck.cards) < 5:
+            return False
+        temp_deck.sort(key= lambda card: card.value)
+        chosen = temp_deck[0]
+        if chosen in self.deck.discarded:
+            self.deck.discarded.remove(chosen)
+        else:
+            self.cards_in_front_of_me.remove(chosen)
+        self.cards_to_draw -= 1
+        return chosen.name
 
 if __name__ == "__main__":
     p = Player("Olo")

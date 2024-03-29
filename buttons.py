@@ -26,7 +26,6 @@ class Button:
         self.screen.blit(self.button_text, (self.x + self.padding, self.y + self.padding))
 
     def use(self):
-        print(self.text)
         self.function()
 
     def update_rect(self):

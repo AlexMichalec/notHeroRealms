@@ -140,6 +140,8 @@ class Deck:
                 self.shuffle()
                 for card in self.cards:
                     card.state = "face_down"
+            if len(self.cards) == 0:
+                break
             drawn.append(self.cards[0])
             self.cards.pop(0)
         return drawn

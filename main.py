@@ -70,6 +70,8 @@ class Game:
         image = pygame.transform.scale(image, (200, 250))
         self.opponent.image = image
 
+        self.cards_to_choose = []
+
 
     def restart(self):
         self.player = Player("Player 1")
@@ -128,7 +130,7 @@ class Game:
         if not if_ommit_info:
             self.intro()
         else:
-            self.turn = "Player"
+            self.who_starts()
         self.update_card_views()
         while True:
 
@@ -154,6 +156,8 @@ class Game:
                 self.handle_events(event)
             self.draw()
             self.move_cards()
+            if self.cards_to_choose:
+                self.draw_cards_to_choose(self.cards_to_choose)
 
             pygame.display.flip()
             self.clock.tick(60)
@@ -306,14 +310,19 @@ class Game:
                         self.player.deck.discarded.extend(self.player.cards_in_front_of_me)
                         self.player.cards_in_front_of_me = []
                         self.update_card_views()
-                        self.add_attack_player()
-                        self.player.reset()
-                        self.move_up()
+                        if self.can_i_kill_someone():
+                            self.cards_to_choose = self.opponent.army
+                        else:
+                            self.add_attack_player()
+                            self.player.reset()
+                            self.move_up()
                         #self.opponent_turn()
 
 
 
                     else:
+                        if self.cards_to_choose:
+                            return
                         self.player.cards_in_front_of_me = self.player.deck.draw(self.player.cards_to_draw)
                         self.update_card_views()
 
@@ -352,6 +361,37 @@ class Game:
                         self.shop_to_buy.insert(index, self.shop_deck.draw(1)[0])
                         self.update_card_views(if_buying=True)
                         self.drawable_cards.extend(self.cards_down)
+                    elif card.state == "to_kill":
+                        if not card.card.if_guardian and len([hero for hero in self.opponent.army if hero.if_guardian]):
+                            self.timers = []
+                            self.opponent_dialog = "You have to kill my Guardians first!"
+                            t = Timer(2000, self.opp_speak_gen("",-1))
+                            t.activate()
+                            self.timers.append(t)
+                        elif card.card.health > self.player.attack_power:
+                            self.timers = []
+                            self.opponent_dialog = "You don't have enough power to kill my Hero!"
+                            t = Timer(2000, self.opp_speak_gen("", -1))
+                            t.activate()
+                            self.timers.append(t)
+                        else:
+                            self.player.attack_power -= card.card.health
+                            self.opponent.deck.add_to_discarded(card.card)
+                            self.opponent.army.remove(card.card)
+                            self.timers = []
+                            self.opponent_dialog = "You killed my " + card.card.name
+                            t = Timer(2000, self.opp_speak_gen("", -1))
+                            t.activate()
+                            self.timers.append(t)
+                            if not self.can_i_kill_someone():
+                                self.buttons.pop()
+                                self.cards_to_choose = []
+                                self.add_attack_player()
+                                self.player.reset()
+                                self.update_card_views()
+                                self.move_up()
+
+
                 mouse_x, mouse_y = pygame.mouse.get_pos()
                 for button in self.buttons:
                     if button.rect.collidepoint(mouse_x, mouse_y):
@@ -380,7 +420,17 @@ class Game:
         for view in self.cards_up:
             view.y -= 30
             if view.y <= -210:
-                self.opponent.deck.add_to_discarded(view.card)
+                if self.opponent.next_bought_card_on_hand:
+                    self.opponent.cards_in_front_of_me.append(view.card)
+                    self.opponent.next_bought_card_on_hand -= 1
+                elif self.opponent.next_bought_card_on_top:
+                    self.opponent.deck.cards = [view.card] + self.opponent.deck.cards
+                    self.opponent.next_bought_card_on_top -= 1
+                elif self.opponent.next_bought_action_on_top and view.card.type == "Action":
+                    self.opponent.deck.cards = [view.card] + self.opponent.deck.cards
+                    self.opponent.next_bought_action_on_top -= 1
+                else:
+                    self.opponent.deck.add_to_discarded(view.card)
                 self.update_card_views(True)
         self.cards_up = [view for view in self.cards_up if view.y > -210]
         self.drawable_cards.extend(self.cards_up)
@@ -474,6 +524,8 @@ class Game:
 
 
     def add_attack_player(self):
+        if len([hero for hero in self.opponent.army if hero.if_guardian]) > 0:
+            return
         for i in range(self.player.attack_power):
             self.attack_points.append([self.screen_width//2,self.screen_height + i*50, -10])
 
@@ -874,8 +926,10 @@ class Game:
                 if view.card == card and view.state == "active":
                     card.use(self.opponent)
                     card.use_with_alliance(self.opponent)
+                    self.opp_special_use()
                     view.state = "used"
                     if card.type == "Hero":
+                        self.opponent.cards_to_draw -= 1
                         self.opponent.army.append(card)
                         self.opponent.cards_in_front_of_me.remove(card)
                         used = True
@@ -897,6 +951,46 @@ class Game:
             t.activate()
             self.timers.append(t)
 
+    def opp_special_use(self):
+        #DRAW A CARD
+        while self.opponent.cards_to_draw > len(self.opponent.cards_in_front_of_me):
+            self.opponent.cards_in_front_of_me.append(self.opponent.deck.draw(1)[0])
+        # SACRIFICES
+        while self.opponent.cards_to_sacrifice > 0:
+            self.opponent.cards_to_sacrifice -= 1
+            name = self.opponent.auto_sacrfice()
+            if name:
+                self.opponent_dialog = "I sacrifice my " + name
+                if self.opponent.sacrifice_bonus > 0:
+                    self.opponent_dialog = self.opponent_dialog + f" and i get {str(self.opponent.sacrifice_bonus)} attack points"
+                    self.opponent.attack_power += self.opponent.sacrifice_bonus
+            if self.opponent.cards_to_sacrifice == 0:
+                self.opponent.sacrifice_bonus = 0
+
+        # HERO REACTIVATIONS
+        if self.opponent.heroes_to_reactivate > 0:
+            temp = []
+            for hero in self.opponent.army:
+                for view in self.drawable_cards:
+                    if view.card == hero and view.state == "used":
+                        temp.append(view)
+            if len(temp) > 0:
+                ch = random.choice(temp)
+                ch.state = "active"
+                self.opponent_dialog = "I reactivate my " + ch.card.name
+            self.opponent.heroes_to_reactivate = 0
+        
+        # STUN A HERO
+        if len(self.player.army) >0 and self.opponent.heroes_to_stun > 0 :
+            hero = random.choice(self.player.army)
+            for view in self.drawable_cards:
+                if view.card == hero:
+                    view.state = "used"
+                    self.opponent_dialog = "I blocked your " + hero.name
+                    self.opponent.heroes_to_stun = 0
+                    break
+ 
+
     def opp_use_army(self):
         self.opponent_army_visible = True
         self.update_card_views(True)
@@ -907,6 +1001,7 @@ class Game:
                     self.opponent_dialog = "I use my " + card.name
                     card.use(self.opponent)
                     card.use_with_alliance(self.opponent)
+                    self.opp_special_use()
                     view.state = "used"
                     self.update_card_views(if_buying=True)
                     used = True
@@ -942,9 +1037,20 @@ class Game:
             t.activate()
             self.timers.append(t)
         else:
-            t = Timer(2000, self.move_down)
-            t.activate()
-            self.timers.append(t)
+            temp = False
+            for card in self.opponent.cards_in_front_of_me:
+                for view in self.drawable_cards:
+                    if view.card == card and view.state == "active":
+                        temp = True
+            if not temp:
+                t = Timer(2000, self.move_down)
+                t.activate()
+                self.timers.append(t)
+            else:
+                self.opponent.cards_to_draw = len(self.opponent.cards_in_front_of_me)
+                t = Timer(2000, self.opp_use)
+                t.activate()
+                self.timers.append(t)
 
 
     def move_down(self):
@@ -966,25 +1072,65 @@ class Game:
         self.update_card_views()
         self.timers = [t for t in self.timers if t.active]
 
+    def draw_cards_to_choose(self, cards, mode="default"):
+        x = 200
+        y = 360
+        pygame.draw.rect(self.screen,(0,0,0),(x,y,20+170*len(cards),40+230))
+        self.update_card_views(True)
+        if mode == "default":
+            self.draw_text("Do you want to attack any enemy's heroes first?", (250, 250, 250), x + 200, y - 30, background="black")
+            self.draw_text("Opponent's Party:",(250,250,250),x+15,y + 10)
+            def func():
+                self.buttons.pop()
+                self.cards_to_choose = []
+                self.timers = []
+                self.add_attack_player()
+                self.player.reset()
+                self.move_up()
+            b = Button(self.screen,"Enough",x+200,y+270,function=func)
+            b.draw()
+            if self.buttons[-1].text!="Enough":
+                self.buttons.append(b)
+            for i, card in enumerate(cards):
+                v = HeroView(self.screen,card,x+20+i*170,y+40,"to_kill")
+                v.draw()
+                self.active_cards.append(v)
+
+    def can_i_kill_someone(self):
+        if not self.opponent.army:
+            return False
+        if not [hero for hero in self.opponent.army if hero.health <= self.player.attack_power]:
+            return False
+        guardians = [hero for hero in self.opponent.army if hero.if_guardian]
+        if len(guardians) > 0 and len([hero for hero in guardians if hero.health < self.player.attack_power]) == 0:
+            return False
+        return True
+
 
 
 
 
 if __name__ == "__main__":
     game = Game()
-    if False:
-        while len(game.player.deck.cards) <12:
+    if 0:
+        while len(game.player.deck.cards) <20:
             x = random.choice(game.shop_deck.cards)
             if x.type == "Hero":
                 game.player.deck.cards.append(x)
                 game.shop_deck.cards.remove(x)
     random.shuffle(game.player.deck.cards)
-    if False:
-        while len(game.opponent.deck.cards) <12:
+    if 0:
+        while len(game.opponent.deck.cards) <20:
             x = random.choice(game.shop_deck.cards)
-            if x.type == "Hero":
-                game.opponent.deck.cards.append(x)
-                game.shop_deck.cards.remove(x)
+            game.opponent.deck.cards.append(x)
+            game.shop_deck.cards.remove(x)
+
     random.shuffle(game.opponent.deck.cards)
-    game.run()
+
+    for _ in range(4):
+        game.player.deck.add(Action("Oszustwo", "", [2,0,0], 5, "blue",
+                    actions_if_alliance=[0,0,0,next_bought_on_hand()]))
+    random.shuffle(game.player.deck.cards)
+  #  game.player.attack_power = random.randint(10,20)
+    game.run(True)
 
