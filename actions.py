@@ -75,7 +75,7 @@ def reactivate_hero():
 
 def stun_hero():
     def sub_fun(player):
-        player.heroes_to_stan += 1
+        player.heroes_to_block += 1
     return sub_fun, "You can block opponent's hero."
 
 
@@ -111,16 +111,13 @@ def next_bought_card_on_the_top_of_deck():
 
 def swap_a_card():
     def sub_fun(player):
-        card = random.choice(player.cards_in_front_of_me)
-        player.cards_in_front_of_me.remove(card)
-        player.deck.add_to_discarded(card)
-        player.cards_in_front_of_me.extend(player.deck.draw(1))
+        player.cards_to_discard = 1
     text = "You can draw a card, if you do, discard another one."
     return sub_fun, text
 
 def swap_two_cards():
     def sub_fun(player):
-        print("Work in progress")
+        player.cards_to_discard = 2
     text = "You can draw max 2 cards, if you do, discard the same amount."
     return sub_fun, text
 
@@ -138,22 +135,13 @@ def attack_for_guardian():
 
 def resurrect_hero():
     def sub_fun(player):
-        temp = [x for x in player.deck.discarded if x.type == "hero"]
-        if len(temp) ==0:
-            return
-        card = random.choice(temp)
-        player.deck.discarded.remove(card)
-        player.deck = [card] + player.deck
+        player.heroes_to_resurect = 1
     text = "You can take a dead Hero and put them on ur deck top."
     return sub_fun, text
 
 def resurrect_card():
     def sub_fun(player):
-        if len(player.deck.discarded) == 0:
-            return
-        card = random.choice(player.deck.discarded)
-        player.deck.discarded.remove(card)
-        player.deck.cards = [card] + player.deck.cards
+        player.cards_to_resurect = 1
     text = "You can take a discarded Card and put it on ur deck top."
     return sub_fun, text
 

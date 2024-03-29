@@ -981,14 +981,44 @@ class Game:
             self.opponent.heroes_to_reactivate = 0
         
         # STUN A HERO
-        if len(self.player.army) >0 and self.opponent.heroes_to_stun > 0 :
+        if len(self.player.army) >0 and self.opponent.heroes_to_block > 0 :
             hero = random.choice(self.player.army)
             for view in self.drawable_cards:
                 if view.card == hero:
                     view.state = "used"
                     self.opponent_dialog = "I blocked your " + hero.name
-                    self.opponent.heroes_to_stun = 0
+                    self.opponent.heroes_to_block = 0
                     break
+
+        #RESURECT A CARD
+        if self.opponent.cards_to_resurect and self.opponent.deck.discarded:
+            temp = self.opponent.deck.discarded
+            temp.sort(key=lambda card: card.value,reverse=True)
+            chosen = temp[0]
+            self.opponent.deck.discarded.remove(chosen)
+            self.opponent.deck.cards = [chosen] + self.opponent.deck.cards
+            self.opponent.cards_to_resurect = 0
+
+        # RESURECT A HERO
+        if self.opponent.heroes_to_resurect and self.opponent.deck.discarded:
+            temp = [card for card in self.opponent.deck.discarded if card.type=="Hero"]
+            temp.sort(key=lambda card: card.value, reverse=True)
+            if temp:
+                chosen = temp[0]
+                self.opponent.deck.discarded.remove(chosen)
+                self.opponent.deck.cards = [chosen] + self.opponent.deck.cards
+            self.opponent.heroes_to_resurect = 0
+
+        # SWAP A CARD OR TWO
+        while self.opponent.cards_to_discard > 0:
+            temp = [card for card in self.opponent.cards_in_front_of_me]
+            temp.sort(key=lambda card:card.value, reverse=True)
+            chosen = temp[0]
+            self.opponent.cards_in_front_of_me.remove(chosen)
+            self.opponent.deck.discard([chosen])
+            self.opponent.cards_to_discard -= 1
+
+
  
 
     def opp_use_army(self):
@@ -1125,7 +1155,7 @@ if __name__ == "__main__":
             game.opponent.deck.cards.append(x)
             game.shop_deck.cards.remove(x)
 
-
   #  game.player.attack_power = random.randint(10,20)
+    random.shuffle(game.opponent.deck.cards)
     game.run(True)
 

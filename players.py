@@ -20,7 +20,10 @@ class Player:
         self.cards_to_sacrifice = 0
         self.sacrifice_bonus = 0
         self.heroes_to_reactivate = 0
-        self.heroes_to_stun = 0
+        self.heroes_to_block = 0
+        self.heroes_to_resurect = 0
+        self.cards_to_resurect = 0
+        self.cards_to_discard = 0
 
     def turn(self):
         pass
@@ -42,7 +45,10 @@ class Player:
         self.next_bought_card_on_top = 0
         self.cards_to_sacrifice = 0
         self.heroes_to_reactivate = 0
-        self.heroes_to_stun = 0
+        self.heroes_to_block = 0
+        self.heroes_to_resurect = 0
+        self.cards_to_resurect = 0
+        self.cards_to_discard = 0
 
 
     def __str__(self):
