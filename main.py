@@ -1125,12 +1125,7 @@ if __name__ == "__main__":
             game.opponent.deck.cards.append(x)
             game.shop_deck.cards.remove(x)
 
-    random.shuffle(game.opponent.deck.cards)
 
-    for _ in range(4):
-        game.player.deck.add(Action("Oszustwo", "", [2,0,0], 5, "blue",
-                    actions_if_alliance=[0,0,0,next_bought_on_hand()]))
-    random.shuffle(game.player.deck.cards)
   #  game.player.attack_power = random.randint(10,20)
     game.run(True)
 
