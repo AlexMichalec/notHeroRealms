@@ -69,8 +69,7 @@ def can_sacrifice_two(bonus=0):
 
 def reactivate_hero():
     def sub_fun(player):
-        player.heroes_to_reactivate += 1
-        print("Action Reactivate not ready to use for player")
+        player.heroes_to_reactivate = 1
     return sub_fun, "Reactivate your Hero"
 
 def stun_hero():

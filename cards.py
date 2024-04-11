@@ -202,6 +202,7 @@ class CardView():
                 if_bw = True
             pygame.draw.rect(self.screen, br_color, (self.x - 3,self.y - 3, self.width + 6, self.height + 6), border_radius=5)
             pygame.draw.rect(self.screen, color, (self.x,self.y, self.width, self.height), border_radius=5)
+            br_color = self.border_color
 
 
 

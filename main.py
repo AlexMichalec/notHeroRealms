@@ -143,6 +143,10 @@ class Game:
         self.button_choose_index_right.state = "hidden"
         self.buttons.append(self.button_choose_index_right)
 
+        self.button_choose_action = Button(self.screen, "No, thanks", self.screen_width//2 - 60, self.screen_height - 100)
+        self.button_choose_action.state = "hidden"
+        self.buttons.append(self.button_choose_action)
+
 
 
     def run(self, if_ommit_info = False):
@@ -152,7 +156,6 @@ class Game:
             self.who_starts()
         self.update_card_views()
         while True:
-            print(self.choose_index)
 
             for t in self.timers:
                 t.update()
@@ -381,6 +384,17 @@ class Game:
                         if self.player.cards_to_sacrifice:
                             self.cards_to_choose = self.player.deck.discarded + self.player.cards_in_front_of_me
                             self.reason_to_choose = "sacrifice"
+                        if self.player.heroes_to_reactivate:
+                            temp = []
+                            for hero in self.player.army:
+                                for view in self.drawable_cards:
+                                    if view.card == hero and view.state == "used":
+                                        temp.append(hero)
+                            if temp:
+                                self.cards_to_choose = temp
+                                self.reason_to_choose = "reactivate"
+                            else:
+                                self.player.heroes_to_reactivate = 0
                         self.update_card_views(True)
                     elif card.state == "face_down":
                         self.player.cards_in_front_of_me = self.player.deck.draw(self.player.cards_to_draw)
@@ -416,16 +430,13 @@ class Game:
                             t.activate()
                             self.timers.append(t)
                             if not self.can_i_kill_someone():
-
-                                self.buttons.pop()
-                                self.cards_to_choose = []
-                                self.choose_index = 0
+                                self.hide_chose_window()
                                 self.add_attack_player()
                                 self.player.reset()
                                 self.update_card_views()
+                                self.timers = []
                                 self.move_up()
                     elif card.state == "to_sacrifice":
-                        self.buttons.pop()
                         self.player.attack_power += self.player.sacrifice_bonus
                         if card.card in self.player.cards_in_front_of_me:
                             self.player.cards_in_front_of_me.remove(card.card)
@@ -441,16 +452,23 @@ class Game:
                         self.player.cards_to_sacrifice -= 1
                         self.player.cards_to_draw -= 1
                         if self.player.cards_to_sacrifice == 0:
-                            self.cards_to_choose = 0
-                            self.reason_to_choose = "default"
+                            self.hide_chose_window()
                             self.player.sacrifice_bonus = 0
-                            self.choose_index = 0
-                            self.button_choose_index_left.state = "hidden"
-                            self.button_choose_index_right.state = "hidden"
-                            self.update_card_views(True)
                         else:
                             self.cards_to_choose.remove(card.card)
                             self.update_card_views(True)
+                    elif card.state == "to_reactivate":
+                        for view in self.drawable_cards:
+                            if view.card == card.card:
+                                view.state = "active"
+                        self.timers = []
+                        self.opponent_dialog = "You reactivated your " + card.card.name
+                        t = Timer(2000, self.opp_speak_gen("", -1))
+                        t.activate()
+                        self.timers.append(t)
+                        self.player.heroes_to_reactivate = 0
+                        self.hide_chose_window()
+
 
 
                 mouse_x, mouse_y = pygame.mouse.get_pos()
@@ -534,7 +552,7 @@ class Game:
         # Clickable
         for view in self.active_cards+self.buttons:
             x, y = pygame.mouse.get_pos()
-            if view.rect.collidepoint(x, y) and view.state!="hidden":
+            if view.rect.collidepoint(x, y) and view.state!="hidden" and view.state!="used":
                 temp = view.color
                 temp2 = view.border_color
                 view.color = (max(0, temp[0]-20), max(temp[1]-20,0), max(0,temp[2]-20))
@@ -694,7 +712,8 @@ class Game:
                 if state == "used":
                     view.y -= 20
                 self.drawable_cards.append(view)
-                self.active_cards.append(view)
+                if not self.army_visible and not self.cards_to_choose:
+                    self.active_cards.append(view)
 
 
 
@@ -1165,56 +1184,60 @@ class Game:
         self.timers = [t for t in self.timers if t.active]
 
     def draw_cards_to_choose(self, cards, mode="default"):
-        x = 200
-        y = 360
-        pygame.draw.rect(self.screen,(0,0,0),(x,y,20+170*min(5,len(cards)),40+230))
         self.update_card_views(True)
+
         if self.reason_to_choose == "sacrifice":
-            self.draw_text("Do you want to sacrifice any card?", (250, 250, 250), x + 200, y - 30,
-                           background="black")
-            self.draw_text("Cards to sacrifice:", (250, 250, 250), x + 15, y + 10)
-            def func():
-                self.buttons.pop()
-                self.cards_to_choose = []
+            text1 ="Do you want to sacrifice any card?"
+            text2 ="Cards to sacrifice:"
+            def nope_func():
+                self.hide_chose_window()
                 self.player.cards_to_sacrifice = 0
                 self.player.sacrifice_bonus = 0
-                self.reason_to_choose = "default"
-                self.timers = []
-                self.button_choose_index_left.state = "hidden"
-                self.button_choose_index_right.state = "hidden"
-            b = Button(self.screen,"No, thanks",x+200,y+270,function=func)
-            b.draw()
-            if self.buttons[-1].text!="No, thanks":
-                self.buttons.append(b)
-            for i, card in enumerate(cards[self.choose_index:self.choose_index+5]):
-                if card.type == "Hero":
-                    v = HeroView(self.screen,card,x+20+i*170,y+40,"to_sacrifice")
-                elif card.type == "Action":
-                    v = ActionView(self.screen, card, x + 20 + i * 170, y + 40, "to_sacrifice")
-                else:
-                    v = CardView(self.screen, card, x + 20 + i * 170, y + 40, "to_sacrifice")
-                v.draw()
-                self.active_cards.append(v)
+
+            action = "to_sacrifice"
+
+        elif self.reason_to_choose == "reactivate":
+
+            text1 = "Do you want to reactivate a hero?"
+            text2 = "Heroes available to reactivate:"
+            def nope_func():
+                self.hide_chose_window()
+                self.player.heroes_to_reactivate = 0
+
+            action = "to_reactivate"
 
 
         else:
-            self.draw_text("Do you want to attack any enemy's heroes first?", (250, 250, 250), x + 200, y - 30, background="black")
-            self.draw_text("Opponent's Party:",(250,250,250),x+15,y + 10)
-            def func():
-                self.buttons.pop()
-                self.cards_to_choose = []
-                self.timers = []
+            text1 = "Do you want to attack any enemy's heroes first?"
+            text2 = "Opponent's Party:"
+            def nope_func():
+                self.hide_chose_window()
                 self.add_attack_player()
                 self.player.reset()
                 self.move_up()
-            b = Button(self.screen,"Enough",x+200,y+270,function=func)
-            b.draw()
-            if self.buttons[-1].text!="Enough":
-                self.buttons.append(b)
-            for i, card in enumerate(cards):
-                v = HeroView(self.screen,card,x+20+i*170,y+40,"to_kill")
-                v.draw()
-                self.active_cards.append(v)
+
+            action = "to_kill"
+        #DRAWING
+
+        x = self.screen_width//2 - min(5,len(cards)) * 170//2
+        y = self.screen_height//2
+        pygame.draw.rect(self.screen, (0, 0, 0), (x, y, 20 + 170 * min(5, len(cards)), 40 + 230))
+        self.draw_text(text1, (250, 250, 250), self.screen_width//2, y - 50, size=30,
+                       background="black", center=True)
+        self.draw_text(text2, (250, 250, 250), self.screen_width//2, y + 10, background="black", center=True)
+
+        for i, card in enumerate(cards[self.choose_index:self.choose_index + 5]):
+            if card.type == "Hero":
+                v = HeroView(self.screen, card, x + 20 + i * 170, y + 40, action)
+            elif card.type == "Action":
+                v = ActionView(self.screen, card, x + 20 + i * 170, y + 40, action)
+            else:
+                v = CardView(self.screen, card, x + 20 + i * 170, y + 40, action)
+            v.draw()
+            self.active_cards.append(v)
+
+        self.button_choose_action.state = "active"
+        self.button_choose_action.function = nope_func
         if self.choose_index>0:
             self.button_choose_index_left.state = "active"
         else:
@@ -1223,6 +1246,15 @@ class Game:
             self.button_choose_index_right.state = "active"
         else:
             self.button_choose_index_right.state = "hidden"
+
+    def hide_chose_window(self):
+        self.button_choose_action.state = "hidden"
+        self.button_choose_index_left.state = "hidden"
+        self.button_choose_index_right.state = "hidden"
+        self.cards_to_choose = []
+        self.reason_to_choose = "default"
+        self.choose_index = 0
+        self.update_card_views(True)
 
 
     def can_i_kill_someone(self):
@@ -1262,6 +1294,13 @@ if __name__ == "__main__":
                     actions_if_alliance=[0,2,0]))
     for _ in range(3):
         game.player.deck.discarded.append(Card("Moneta", "+1 złoto", [1,0,0]))
+    random.shuffle(game.player.deck.cards)
+    """
+    """
+    for _ in range(9):
+        game.player.deck.add(Action("Zwołanie Wojsk", "", [3, 0, 5, reactivate_hero()], 4, "yellow",
+                        actions_if_alliance=[0, 0, 0]))
+        game.player.deck.add(random.choice([x for x in game.shop_deck.cards if x.type == "Hero"]))
     random.shuffle(game.player.deck.cards)
     """
     game.run(True)
