@@ -672,7 +672,7 @@ def get_shop_deck():
         deck.add(Action("Zastraszenie", "", [0,5,0], 2, "blue",
                         actions_if_alliance=[2,0,0]))
 
-    deck.add(Action("Zlecenie Zabójstwa", "Zabójca", [0, 7, 0], 3, "blue",
+    deck.add(Action("Zlecenie Zabójstwa", "Zabójca", [0, 7, 0], 4, "blue",
                     actions_if_alliance=[0, 0, 0, stun_hero()]))
 
     for _ in range(2):

@@ -43,8 +43,6 @@ class Game:
         self.army_visible = False
         self.scrolling_speed = 0
 
-        self.buttons = []
-        self.set_buttons()
         self.base_y=0
         self.opponent_y = -1 * self.screen_height * 2 // 3
         self.opponent.opponent = self.player
@@ -71,7 +69,11 @@ class Game:
         self.opponent.image = image
 
         self.cards_to_choose = []
+        self.reason_to_choose = "default"
+        self.choose_index = 0
 
+        self.buttons = []
+        self.set_buttons()
 
     def restart(self):
         self.player = Player("Player 1")
@@ -108,6 +110,10 @@ class Game:
         self.who_starts()
         self.attack_points = []
 
+        self.cards_to_choose = []
+        self.reason_to_choose = "default"
+        self.choose_index = 0
+
 
     def set_buttons(self):
         def func():
@@ -125,6 +131,19 @@ class Game:
         self.button_army = Button(self.screen, "Your Heroes:", 30, 320, function=func2)
         self.buttons.append(self.button_army)
 
+        def func_left():
+            self.choose_index -= 1
+        self.button_choose_index_left = Button(self.screen, "<-",100, 500, function= func_left)
+        self.button_choose_index_left.state = "hidden"
+        self.buttons.append(self.button_choose_index_left)
+
+        def func_right():
+            self.choose_index += 1
+        self.button_choose_index_right = Button(self.screen, "->",1100, 500, function= func_right)
+        self.button_choose_index_right.state = "hidden"
+        self.buttons.append(self.button_choose_index_right)
+
+
 
     def run(self, if_ommit_info = False):
         if not if_ommit_info:
@@ -133,7 +152,7 @@ class Game:
             self.who_starts()
         self.update_card_views()
         while True:
-
+            print(self.choose_index)
 
             for t in self.timers:
                 t.update()
@@ -145,7 +164,7 @@ class Game:
                     view.update_rect()
 
             if self.goal_y_set:
-                if abs(self.base_y - self.goal_y) >= 5:
+                if abs(self.base_y - self.goal_y) >= 10:
                     self.scrolling_speed = 10 if self.base_y < self.goal_y else -10
                 else:
                     self.scrolling_speed = 0
@@ -331,6 +350,16 @@ class Game:
                     self.scrolling_speed = 0
                 elif event.key == pygame.K_DOWN:
                     self.scrolling_speed = 0
+                elif event.key == pygame.K_f:
+                    temp = (self.screen_width, self.screen_height)
+                    self.screen = pygame.display.set_mode((0,0), pygame.FULLSCREEN)
+                    self.screen_width = self.screen.get_width()
+                    self.screen_height = self.screen.get_height()
+                    if temp == (self.screen_width, self.screen_height):
+                        self.screen = pygame.display.set_mode((1300, 786))
+                        self.screen_width = self.screen.get_width()
+                        self.screen_height = self.screen.get_height()
+                    self.update_card_views(True)
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_x, mouse_y = pygame.mouse.get_pos()
                 for card in self.active_cards:
@@ -349,6 +378,9 @@ class Game:
                             self.player.cards_in_front_of_me.remove(card.card)
                             self.player.cards_to_draw -= 1
                             self.update_card_views(if_buying=True)
+                        if self.player.cards_to_sacrifice:
+                            self.cards_to_choose = self.player.deck.discarded + self.player.cards_in_front_of_me
+                            self.reason_to_choose = "sacrifice"
                         self.update_card_views(True)
                     elif card.state == "face_down":
                         self.player.cards_in_front_of_me = self.player.deck.draw(self.player.cards_to_draw)
@@ -384,17 +416,46 @@ class Game:
                             t.activate()
                             self.timers.append(t)
                             if not self.can_i_kill_someone():
+
                                 self.buttons.pop()
                                 self.cards_to_choose = []
+                                self.choose_index = 0
                                 self.add_attack_player()
                                 self.player.reset()
                                 self.update_card_views()
                                 self.move_up()
+                    elif card.state == "to_sacrifice":
+                        self.buttons.pop()
+                        self.player.attack_power += self.player.sacrifice_bonus
+                        if card.card in self.player.cards_in_front_of_me:
+                            self.player.cards_in_front_of_me.remove(card.card)
+                        else:
+                            self.player.deck.discarded.remove(card.card)
+                        self.timers = []
+                        self.opponent_dialog = "You sacrificed your " + card.card.name
+                        if self.player.sacrifice_bonus > 0:
+                            self.opponent_dialog = self.opponent_dialog + " and got " + str(self.player.sacrifice_bonus) + " attack points!"
+                        t = Timer(2000, self.opp_speak_gen("", -1))
+                        t.activate()
+                        self.timers.append(t)
+                        self.player.cards_to_sacrifice -= 1
+                        self.player.cards_to_draw -= 1
+                        if self.player.cards_to_sacrifice == 0:
+                            self.cards_to_choose = 0
+                            self.reason_to_choose = "default"
+                            self.player.sacrifice_bonus = 0
+                            self.choose_index = 0
+                            self.button_choose_index_left.state = "hidden"
+                            self.button_choose_index_right.state = "hidden"
+                            self.update_card_views(True)
+                        else:
+                            self.cards_to_choose.remove(card.card)
+                            self.update_card_views(True)
 
 
                 mouse_x, mouse_y = pygame.mouse.get_pos()
                 for button in self.buttons:
-                    if button.rect.collidepoint(mouse_x, mouse_y):
+                    if button.rect.collidepoint(mouse_x, mouse_y) and button.state!="hidden":
                         button.use()
                         self.update_card_views(if_buying=True)
 
@@ -466,13 +527,14 @@ class Game:
         for button in self.buttons:
             if button == self.button_army and len(self.player.army) == 0:
                 continue
-            button.draw()
+            if button.state == "active":
+                button.draw()
         #self.draw_player_cards()
 
         # Clickable
         for view in self.active_cards+self.buttons:
             x, y = pygame.mouse.get_pos()
-            if view.rect.collidepoint(x, y):
+            if view.rect.collidepoint(x, y) and view.state!="hidden":
                 temp = view.color
                 temp2 = view.border_color
                 view.color = (max(0, temp[0]-20), max(temp[1]-20,0), max(0,temp[2]-20))
@@ -1105,9 +1167,37 @@ class Game:
     def draw_cards_to_choose(self, cards, mode="default"):
         x = 200
         y = 360
-        pygame.draw.rect(self.screen,(0,0,0),(x,y,20+170*len(cards),40+230))
+        pygame.draw.rect(self.screen,(0,0,0),(x,y,20+170*min(5,len(cards)),40+230))
         self.update_card_views(True)
-        if mode == "default":
+        if self.reason_to_choose == "sacrifice":
+            self.draw_text("Do you want to sacrifice any card?", (250, 250, 250), x + 200, y - 30,
+                           background="black")
+            self.draw_text("Cards to sacrifice:", (250, 250, 250), x + 15, y + 10)
+            def func():
+                self.buttons.pop()
+                self.cards_to_choose = []
+                self.player.cards_to_sacrifice = 0
+                self.player.sacrifice_bonus = 0
+                self.reason_to_choose = "default"
+                self.timers = []
+                self.button_choose_index_left.state = "hidden"
+                self.button_choose_index_right.state = "hidden"
+            b = Button(self.screen,"No, thanks",x+200,y+270,function=func)
+            b.draw()
+            if self.buttons[-1].text!="No, thanks":
+                self.buttons.append(b)
+            for i, card in enumerate(cards[self.choose_index:self.choose_index+5]):
+                if card.type == "Hero":
+                    v = HeroView(self.screen,card,x+20+i*170,y+40,"to_sacrifice")
+                elif card.type == "Action":
+                    v = ActionView(self.screen, card, x + 20 + i * 170, y + 40, "to_sacrifice")
+                else:
+                    v = CardView(self.screen, card, x + 20 + i * 170, y + 40, "to_sacrifice")
+                v.draw()
+                self.active_cards.append(v)
+
+
+        else:
             self.draw_text("Do you want to attack any enemy's heroes first?", (250, 250, 250), x + 200, y - 30, background="black")
             self.draw_text("Opponent's Party:",(250,250,250),x+15,y + 10)
             def func():
@@ -1125,6 +1215,15 @@ class Game:
                 v = HeroView(self.screen,card,x+20+i*170,y+40,"to_kill")
                 v.draw()
                 self.active_cards.append(v)
+        if self.choose_index>0:
+            self.button_choose_index_left.state = "active"
+        else:
+            self.button_choose_index_left.state = "hidden"
+        if len(cards) > self.choose_index + 5:
+            self.button_choose_index_right.state = "active"
+        else:
+            self.button_choose_index_right.state = "hidden"
+
 
     def can_i_kill_someone(self):
         if not self.opponent.army:
@@ -1157,5 +1256,14 @@ if __name__ == "__main__":
 
   #  game.player.attack_power = random.randint(10,20)
     random.shuffle(game.opponent.deck.cards)
+    """
+    for _ in range(20):
+        game.player.deck.add(Action("Dotyk Śmierci", "", [0,2,0, can_sacrifice()], 1, "red",
+                    actions_if_alliance=[0,2,0]))
+    for _ in range(3):
+        game.player.deck.discarded.append(Card("Moneta", "+1 złoto", [1,0,0]))
+    random.shuffle(game.player.deck.cards)
+    """
     game.run(True)
+
 
