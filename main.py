@@ -296,17 +296,54 @@ class Game:
             for event in pygame.event.get():
                 self.handle_events(event)
 
-        while i < 1000:
-            for event in pygame.event.get():
-                self.handle_events(event)
-            self.screen.fill(((GREEN[0] * i)//1000, (GREEN[1] * i)//1000, (GREEN[2] * i)//1000))
-            pygame.display.update()
-            i = i+1
+        self.random_fade_in()
 
         self.turn = x
         if x == "Opponent":
             self.update_card_views()
             self.move_up()
+
+
+    def random_fade_in(self):
+        self.update_card_views()
+        x = random.randint(1,5)
+        if x == 1:
+            for i in range(100):
+                self.draw()
+                pygame.draw.rect(self.screen, "black",
+                                 (-i * self.screen_width / 200, 0, self.screen_width // 2, self.screen_height))
+                pygame.draw.rect(self.screen, "black",
+                                 ((100 + i) * self.screen_width / 200, 0, self.screen_width // 2, self.screen_height))
+                pygame.display.update()
+        elif x == 2:
+            for i in range(100):
+                self.draw()
+                pygame.draw.rect(self.screen, "black",
+                                 (0, -i*self.screen_height//200, self.screen_width, self.screen_height//2))
+                pygame.draw.rect(self.screen, "black",
+                                 (0, (100+i)*self.screen_height//200, self.screen_width, self.screen_height//2))
+                pygame.display.update()
+        elif x == 3:
+            for i in range(100):
+                self.draw()
+                for x in range(10):
+                    for y in range(10):
+                        if 10*x + y >= i:
+                            pygame.draw.rect(self.screen, "black", (x*self.screen_width//10, y*self.screen_height//10, 5+self.screen_width//10, 5+self.screen_height//10))
+                pygame.display.update()
+        elif x==4:
+            for i in range(100):
+                self.draw()
+                for x in range(10):
+                    for y in range(10):
+                        if 10*y + x >= i:
+                            pygame.draw.rect(self.screen, "black", (x*self.screen_width//10, y*self.screen_height//10, 5+ self.screen_width//10, 5+self.screen_height//10))
+                pygame.display.update()
+        elif x==5:
+            for i in range(100):
+                self.draw()
+                pygame.draw.circle(self.screen,"black",(self.screen_width//2, self.screen_height//2),self.screen_width*(100-i)//100)
+                pygame.display.update()
 
 
 
@@ -384,6 +421,36 @@ class Game:
                         if self.player.cards_to_sacrifice:
                             self.cards_to_choose = self.player.deck.discarded + self.player.cards_in_front_of_me
                             self.reason_to_choose = "sacrifice"
+                        if self.player.cards_to_discard > 0:
+                            for _ in range(self.player.cards_to_discard):
+                                self.player.cards_in_front_of_me.append(self.player.deck.draw(1)[0])
+                            self.cards_to_choose = self.player.cards_in_front_of_me
+                            self.reason_to_choose = "discard"
+
+                        if self.player.heroes_to_block > 0:
+                            self.cards_to_choose = self.player.opponent.army
+                            if len(self.cards_to_choose) > 0:
+                                self.reason_to_choose = "block"
+                            else:
+                                self.player.heroes_to_block = 0
+
+                        if self.player.cards_to_resurect > 0:
+                            self.cards_to_choose = self.player.deck.discarded
+                            if len(self.cards_to_choose) > 0:
+                                self.reason_to_choose = "resurect"
+                            else:
+                                self.player.cards_to_resurect = 0
+
+                        if self.player.heroes_to_resurect > 0:
+                            self.cards_to_choose = [card for card in self.player.deck.discarded if card.type == "Hero"]
+                            if len(self.cards_to_choose) > 0:
+                                self.reason_to_choose = "resurect"
+                            else:
+                                self.player.heroes_to_resurect = 0
+
+
+
+
                         if self.player.heroes_to_reactivate:
                             temp = []
                             for hero in self.player.army:
@@ -468,6 +535,27 @@ class Game:
                         self.timers.append(t)
                         self.player.heroes_to_reactivate = 0
                         self.hide_chose_window()
+                    elif card.state == "to_discard":
+                        self.player.cards_in_front_of_me.remove(card.card)
+                        self.player.deck.discard([card.card])
+                        self.player.cards_to_discard -= 1
+                        if self.player.cards_to_discard == 0:
+                            self.hide_chose_window()
+                        else:
+                            self.update_card_views(True)
+                    elif card.state == "to_resurect":
+                        self.player.deck.cards = [card.card] + self.player.deck.cards
+                        self.player.deck.discarded.remove(card.card)
+                        self.player.cards_to_resurect = 0
+                        self.player.heroes_to_resurect = 0
+                        self.hide_chose_window()
+                    elif card.state == "to_block":
+                        for view in self.drawable_cards:
+                            if view.card == card.card:
+                                view.state = "used"
+                        self.player.heroes_to_block = 0
+                        self.hide_chose_window()
+
 
 
 
@@ -1185,6 +1273,7 @@ class Game:
 
     def draw_cards_to_choose(self, cards, mode="default"):
         self.update_card_views(True)
+        button_left_hidden = False
 
         if self.reason_to_choose == "sacrifice":
             text1 ="Do you want to sacrifice any card?"
@@ -1205,6 +1294,32 @@ class Game:
                 self.player.heroes_to_reactivate = 0
 
             action = "to_reactivate"
+
+        elif self.reason_to_choose == "discard":
+            button_left_hidden = True
+            ctd = self.player.cards_to_discard
+            text1 = "You have to discard a card." if ctd == 1 else "You have to discard " + str(ctd) + " cards."
+            text2 = "Choose a card:"
+            action = "to_discard"
+            while self.choose_index+5 < len(self.cards_to_choose):
+                self.choose_index += 1
+
+        elif self.reason_to_choose == "resurect":
+            text1 = "You can take a card from the discarded pile and put it the top of your deck"
+            text2 = "Choose a card:"
+            action = "to_resurect"
+            def nope_func():
+                self.hide_chose_window()
+                self.player.heroes_to_resurect = 0
+                self.player.cards_to_resurect = 0
+
+        elif self.reason_to_choose == "block":
+            text1 = "You can block a hero of your opponent"
+            text2 = "Opponents's party:"
+            action = "to_block"
+            def nope_func():
+                self.hide_chose_window()
+                self.player.heroes_to_block = 0
 
 
         else:
@@ -1236,8 +1351,9 @@ class Game:
             v.draw()
             self.active_cards.append(v)
 
-        self.button_choose_action.state = "active"
-        self.button_choose_action.function = nope_func
+        if not button_left_hidden:
+            self.button_choose_action.state = "active"
+            self.button_choose_action.function = nope_func
         if self.choose_index>0:
             self.button_choose_index_left.state = "active"
         else:
@@ -1301,8 +1417,21 @@ if __name__ == "__main__":
         game.player.deck.add(Action("Zwołanie Wojsk", "", [3, 0, 5, reactivate_hero()], 4, "yellow",
                         actions_if_alliance=[0, 0, 0]))
         game.player.deck.add(random.choice([x for x in game.shop_deck.cards if x.type == "Hero"]))
-    random.shuffle(game.player.deck.cards)
     """
-    game.run(True)
+    """""
+    for _ in range(3):
+        game.player.deck.add(Action("Dar Elfów", "", [2, 0, 0, swap_a_card()], 2, "green",
+                        actions_if_alliance=[0, 4, 0]))
+        game.player.deck.add(Action("Szał", "Ork", [0, 6, 0, swap_two_cards()], 6, "green"))
+        game.player.deck.add(Action("Bomba Ogniowa", "", [0, 8, 0, stun_hero(), draw_card()], 8, "blue",
+                    actions_if_destroyed=[0, 5, 0]))
+        game.player.deck.add(Action("Niszczenie i Grabież", "", [0, 6, 0, resurrect_card()], 6, "blue",
+                    actions_if_alliance=[0, 0, 6]))
+        game.player.deck.add(Hero("Varrick", "Nekromanta", [0, 0, 0, resurrect_hero()], 3, 5, alliance="red", actions_if_alliance=[0,0,0,draw_card()]))
+    game.opponent.coins = 20
+    random.shuffle(game.player.deck.cards)
+"""
+
+    game.run()
 
 
